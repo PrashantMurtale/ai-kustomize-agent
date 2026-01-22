@@ -1,0 +1,38 @@
+# Access Configuration for AI Kustomize Agent
+
+access:
+  # Mode: cluster or file
+  mode: cluster
+  
+  # Kubeconfig settings (for cluster mode)
+  kubeconfig:
+    path: ~/.kube/config
+    context: null  # Use current context
+  
+  # Safety settings
+  safety:
+    # Always require confirmation for these namespaces
+    protected_namespaces:
+      - production
+      - prod
+      - kube-system
+    
+    # Never modify these namespaces
+    excluded_namespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+    
+    # Actions that always require confirmation
+    dangerous_actions:
+      - delete
+      - remove
+      - scale_down
+    
+    # Default to dry run
+    dry_run_by_default: true
+  
+  # Audit logging
+  audit:
+    enabled: true
+    log_file: audit.log
