@@ -115,8 +115,8 @@ Return ONLY valid JSON, no markdown.
             return intent
             
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse AI response: {e}")
-            return {"error": f"Invalid JSON: {e}", "raw": text[:200]}
+            logger.error(f"Failed to parse AI response: {e} - Raw text: {text[:200]}")
+            return {"error": f"Invalid JSON response from AI: {e}", "raw": text[:200]}
     
     def _fallback_parse(self, request: str) -> Dict[str, Any]:
         """Basic keyword-based parsing when AI is unavailable."""
