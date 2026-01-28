@@ -19,4 +19,10 @@ COPY config/ ./config/
 
 ENV PYTHONPATH=/app/src
 
-ENTRYPOINT ["python", "src/main.py"]
+# Create a simple health check script
+RUN echo '#!/bin/bash\necho "AI Kustomize Agent is ready"\nwhile true; do sleep 3600; done' > /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
+
+# Use bash entrypoint to keep container running
+# For CLI usage, exec into the container: kubectl exec -it <pod> -- python src/main.py "your request"
+ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
