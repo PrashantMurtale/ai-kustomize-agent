@@ -109,7 +109,7 @@ class IntentParser:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a Kubernetes expert. Parse user requests into structured JSON for Kustomize patch generation. Return ONLY valid JSON, no markdown."
+                    "content": "You are a Kubernetes expert. Your task is to parse user requests into a SPECIFIC structured JSON format for Kustomize patch generation. \nCRITICAL: DO NOT return a Kubernetes manifest. DO NOT return markdown. return ONLY the JSON intent object."
                 },
                 {
                     "role": "user",
@@ -164,7 +164,8 @@ Examples:
 - "Add label team=platform to services" ->
   {{"action": "add", "resource_type": "services", "target_field": "labels", "value": {{"team": "platform"}}}}
 
-Return ONLY valid JSON, no markdown.
+Return ONLY valid JSON intent object.
+CRITICAL: DO NOT RETURN A KUBERNETES MANIFEST. RETURN ONLY THE STRUCTURED INTENT JSON ABOVE.
 """
 
     def _parse_response(self, text: str) -> Dict[str, Any]:
