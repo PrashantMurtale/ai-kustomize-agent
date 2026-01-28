@@ -120,7 +120,13 @@ class ClusterScanner:
                 label_selector=labels
             )
         
-        return [self._to_dict(item) for item in result.items]
+        resources = []
+        for item in result.items:
+            d = self._to_dict(item)
+            d["kind"] = "Deployment"
+            d["apiVersion"] = "apps/v1"
+            resources.append(d)
+        return resources
     
     def _get_services(self, namespace: Optional[str], labels: Optional[str]) -> List[Dict]:
         """Get services."""
@@ -134,7 +140,13 @@ class ClusterScanner:
                 label_selector=labels
             )
         
-        return [self._to_dict(item) for item in result.items]
+        resources = []
+        for item in result.items:
+            d = self._to_dict(item)
+            d["kind"] = "Service"
+            d["apiVersion"] = "v1"
+            resources.append(d)
+        return resources
     
     def _get_pods(self, namespace: Optional[str], labels: Optional[str]) -> List[Dict]:
         """Get pods."""
@@ -148,7 +160,13 @@ class ClusterScanner:
                 label_selector=labels
             )
         
-        return [self._to_dict(item) for item in result.items]
+        resources = []
+        for item in result.items:
+            d = self._to_dict(item)
+            d["kind"] = "Pod"
+            d["apiVersion"] = "v1"
+            resources.append(d)
+        return resources
     
     def _get_configmaps(self, namespace: Optional[str], labels: Optional[str]) -> List[Dict]:
         """Get configmaps."""
@@ -162,7 +180,13 @@ class ClusterScanner:
                 label_selector=labels
             )
         
-        return [self._to_dict(item) for item in result.items]
+        resources = []
+        for item in result.items:
+            d = self._to_dict(item)
+            d["kind"] = "ConfigMap"
+            d["apiVersion"] = "v1"
+            resources.append(d)
+        return resources
     
     def _to_dict(self, k8s_object) -> Dict:
         """Convert Kubernetes object to dictionary."""

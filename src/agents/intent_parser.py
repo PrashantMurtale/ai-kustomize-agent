@@ -173,14 +173,30 @@ Return ONLY valid JSON, no markdown.
             # Clean up response
             text = text.strip()
             
-            if text.startswith("```json"):
-                text = text[7:]
-            if text.startswith("```"):
-                text = text[3:]
-            if text.endswith("```"):
-                text = text[:-3]
+            # Remove any markdown code blocks
+            if "```" in text:
+                import re
+                json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+                if json_match:
+                    text = json_match.group(1)
+                else:
+                    # Fallback if regex fails, just strip markers
+                    text = text.replace("```json", "").replace("```", "").strip()
+            
+            # Find the first { and last } to extract JSON object if there's surrounding text
+            start = text.find('{')
+            end = text.rfind('}')
+            if start != -1 and end != -1:
+                text = text[start:end+1]
             
             intent = json.loads(text.strip())
+            
+            # If AI returned a list, take the first item
+            if isinstance(intent, list) and len(intent) > 0:
+                intent = intent[0]
+            
+            if not isinstance(intent, dict):
+                return {"error": f"AI did not return a dictionary object: {type(intent)}", "raw": text}
             
             # Validate required fields
             required = ["action", "resource_type", "target_field"]
@@ -190,7 +206,7 @@ Return ONLY valid JSON, no markdown.
             
             return intent
             
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, Exception) as e:
             logger.error(f"Failed to parse AI response: {e} - Raw text: {text[:200]}")
             return {"error": f"Invalid JSON response from AI: {e}", "raw": text[:200]}
     
