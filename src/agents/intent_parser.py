@@ -184,20 +184,52 @@ CRITICAL: DO NOT RETURN A KUBERNETES MANIFEST. RETURN ONLY THE STRUCTURED INTENT
                     # Fallback if regex fails, just strip markers
                     text = text.replace("```json", "").replace("```", "").strip()
             
-            # Find the first { and last } to extract JSON object if there's surrounding text
-            start = text.find('{')
-            end = text.rfind('}')
-            if start != -1 and end != -1:
-                text = text[start:end+1]
+            # Find the first { and last }
+            # If there are multiple JSON blocks, we want the first valid one
+            all_objects = []
             
-            # Remove trailing commas that break json.loads
-            # Handle trailing commas in objects and arrays
-            import re
-            text = re.sub(r',\s*([\]\}])', r'\1', text)
+            # Simple balancing to find JSON objects
+            brace_count = 0
+            start_index = -1
             
-            intent = json.loads(text.strip())
+            for i, char in enumerate(text):
+                if char == '{':
+                    if brace_count == 0:
+                        start_index = i
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0 and start_index != -1:
+                        # Found a full object
+                        potential_json = text[start_index:i+1]
+                        
+                        # Clean trailing commas
+                        import re
+                        potential_json = re.sub(r',\s*([\]\}])', r'\1', potential_json)
+                        
+                        try:
+                            obj = json.loads(potential_json.strip())
+                            if isinstance(obj, dict):
+                                all_objects.append(obj)
+                                # Break after first valid intent object
+                                break
+                        except json.JSONDecodeError:
+                            continue
             
-            # If AI returned a list, take the first item
+            if not all_objects:
+                # Last ditch effort with the old method
+                start = text.find('{')
+                end = text.rfind('}')
+                if start != -1 and end != -1:
+                    text = text[start:end+1]
+                    text = re.sub(r',\s*([\]\}])', r'\1', text)
+                    intent = json.loads(text.strip())
+                else:
+                    return {"error": "No JSON object found in response", "raw": text}
+            else:
+                intent = all_objects[0]
+            
+            # If AI returned a list (rare with the brace counting but safe to keep)
             if isinstance(intent, list) and len(intent) > 0:
                 intent = intent[0]
             
