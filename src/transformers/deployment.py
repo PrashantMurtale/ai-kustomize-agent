@@ -53,18 +53,32 @@ class DeploymentTransformer(BaseTransformer):
         value = self.intent.get("value")
 
         from_prefix = value.get("from", "") if isinstance(value, dict) else ""
-        to_prefix = value.get("to", value) if isinstance(value, dict) else value
+        to_image = value.get("to", value) if isinstance(value, dict) else value
 
         containers = self.resource.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
 
         patched_containers = []
         for c in containers:
             current_image = c.get("image", "")
+            
             if from_prefix and from_prefix in current_image:
-                new_image = current_image.replace(from_prefix, to_prefix)
+                new_image = current_image.replace(from_prefix, to_image)
+            elif "/" not in to_image and ":" in to_image and ":" in current_image:
+                # If target is like "nginx:1.16.0" and current is "nginx:1.15.0"
+                # Just replace the whole thing if it seems like a tag update
+                new_image = to_image
+            elif "/" not in current_image and "/" not in to_image:
+                # Simple case: both are just image[:tag]
+                new_image = to_image
             else:
-                image_name = current_image.split('/')[-1]
-                new_image = f"{to_prefix}/{image_name}"
+                # Fallback to original logic but with better naming
+                image_parts = current_image.split('/')
+                image_name = image_parts[-1]
+                
+                if "/" in to_image:
+                    new_image = to_image
+                else:
+                    new_image = f"{to_image}/{image_name}"
 
             patched_containers.append({
                 "name": c["name"],
