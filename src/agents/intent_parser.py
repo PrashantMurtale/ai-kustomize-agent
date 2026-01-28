@@ -189,6 +189,11 @@ Return ONLY valid JSON, no markdown.
             if start != -1 and end != -1:
                 text = text[start:end+1]
             
+            # Remove trailing commas that break json.loads
+            # Handle trailing commas in objects and arrays
+            import re
+            text = re.sub(r',\s*([\]\}])', r'\1', text)
+            
             intent = json.loads(text.strip())
             
             # If AI returned a list, take the first item
