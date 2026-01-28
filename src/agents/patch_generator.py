@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any, List
 import yaml
 
-from src.transformers.factory import get_transformer
+from transformers.factory import get_transformer
 
 logger = logging.getLogger(__name__)
 

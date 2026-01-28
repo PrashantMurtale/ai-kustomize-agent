@@ -1,0 +1,16 @@
+2026-01-28 10:57:23,051 - INFO - Azure OpenAI initialized with deployment: gpt-4o
+2026-01-28 10:57:23,052 - INFO - Loaded in-cluster config
+2026-01-28 10:57:23,052 - INFO - 📝 Processing request: Add memory limit 512Mi to all deployments
+2026-01-28 10:57:23,052 - INFO - 🤖 Parsing intent with AI...
+2026-01-28 10:57:24,907 - INFO - HTTP Request: POST https://akshronix-openai-key.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-02-15-preview "HTTP/1.1 200 OK"
+2026-01-28 10:57:24,913 - INFO -    Action: add
+2026-01-28 10:57:24,913 - INFO -    Target: deployments in None
+2026-01-28 10:57:24,913 - INFO - 🔍 Scanning resources...
+2026-01-28 10:57:24,951 - INFO -    Found 1 matching resources
+2026-01-28 10:57:24,951 - INFO - 🔧 Generating patches...
+2026-01-28 10:57:24,951 - INFO -    Generated 0 patches
+2026-01-28 10:57:24,951 - INFO - 👀 Preview of changes:
+
+==================================================
+Status: preview
+Message: Use --apply to apply changes or --export to save Kustomize files
