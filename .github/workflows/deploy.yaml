@@ -1,0 +1,155 @@
+# =============================================================================
+# GitHub Actions CI/CD with Docker Hub
+# =============================================================================
+# Uses Docker Hub as the container registry (FREE for public repos, 1 private)
+#
+# Required GitHub Secrets:
+#   - DOCKERHUB_USERNAME: Your Docker Hub username
+#   - DOCKERHUB_TOKEN: Docker Hub access token (NOT password)
+#   - AZURE_OPENAI_API_KEY: Your Azure OpenAI API key
+#   - AZURE_OPENAI_ENDPOINT: Your Azure OpenAI endpoint URL
+#   - AZURE_CREDENTIALS: Azure service principal credentials (for AKS login)
+#   - AKS_RESOURCE_GROUP: AKS resource group name
+#   - AKS_CLUSTER_NAME: AKS cluster name
+#
+# How to get Docker Hub Token:
+#   1. Go to https://hub.docker.com/settings/security
+#   2. Click "New Access Token"
+#   3. Give it a name and copy the token
+#   4. Add as DOCKERHUB_TOKEN secret in GitHub
+# =============================================================================
+
+name: Build and Deploy (Docker Hub)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  IMAGE_NAME: ai-kustomize-agent
+
+jobs:
+  build:
+    name: Build & Push to Docker Hub
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Output image info
+        run: |
+          echo "✅ Image pushed to Docker Hub!"
+          echo "📦 Image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+
+  deploy:
+    name: Deploy to AKS
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get AKS credentials
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
+
+      # Create namespace if not exists
+      - name: Create Namespace
+        run: |
+          kubectl create namespace devops-tools --dry-run=client -o yaml | kubectl apply -f -
+
+      # Create Kubernetes Secret from GitHub Secrets
+      - name: Create API Key Secret
+        run: |
+          kubectl create secret generic ai-kustomize-agent-secrets \
+            --namespace=devops-tools \
+            --from-literal=AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
+            --from-literal=AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      # Create Docker Hub pull secret (for private repos)
+      - name: Create Docker Hub Pull Secret
+        run: |
+          kubectl create secret docker-registry dockerhub-secret \
+            --namespace=devops-tools \
+            --docker-server=https://index.docker.io/v1/ \
+            --docker-username=${{ secrets.DOCKERHUB_USERNAME }} \
+            --docker-password=${{ secrets.DOCKERHUB_TOKEN }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy to Kubernetes
+        run: |
+          # Define image
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          
+          # Apply RBAC
+          kubectl apply -f deploy/rbac.yaml
+          
+          # Apply deployment with updated image
+          cat deploy/deployment.yaml | \
+            sed "s|YOUR_REGISTRY/ai-kustomize-agent:latest|${IMAGE}|g" | \
+            kubectl apply -f -
+          
+          # Add image pull secret (for private Docker Hub repos)
+          kubectl patch deployment ai-kustomize-agent -n devops-tools \
+            --type='json' \
+            -p='[{"op": "add", "path": "/spec/template/spec/imagePullSecrets", "value": [{"name": "dockerhub-secret"}]}]' \
+            2>/dev/null || true
+          
+          echo "⏳ Waiting for deployment rollout..."
+          kubectl rollout status deployment/ai-kustomize-agent -n devops-tools --timeout=180s
+          
+          echo "✅ Deployment successful!"
+
+      - name: Verify deployment
+        run: |
+          echo "=========================================="
+          echo "📦 DEPLOYMENT STATUS"
+          echo "=========================================="
+          kubectl get deployment ai-kustomize-agent -n devops-tools
+          echo ""
+          echo "🔷 PODS"
+          kubectl get pods -n devops-tools -l app=ai-kustomize-agent
+          echo ""
+          echo "🔐 SECRETS"
+          kubectl get secrets -n devops-tools | grep -E "NAME|ai-kustomize|dockerhub"
+          echo ""
+          echo "=========================================="
+          echo "✅ Deployment complete!"
+          echo "Image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "=========================================="

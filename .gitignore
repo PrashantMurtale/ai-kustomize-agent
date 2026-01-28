@@ -18,3 +18,11 @@ output/
 # Kubernetes
 kubeconfig
 *.kubeconfig
+
+# Secrets (NEVER commit these!)
+*-secrets-raw.yaml
+secret*.yaml
+!sealed-secrets.yaml
+!azure-keyvault-secrets.yaml
+*.key
+*.pem

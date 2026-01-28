@@ -1,5 +1,6 @@
 """
 Intent Parser - Uses AI to understand user requests.
+Supports both Google Gemini and Azure OpenAI.
 """
 
 import os
@@ -7,26 +8,72 @@ import json
 import logging
 from typing import Dict, Any
 
-import google.generativeai as genai
-
 logger = logging.getLogger(__name__)
 
-# Initialize Gemini
-api_key = os.getenv("GEMINI_API_KEY")
-if api_key:
-    genai.configure(api_key=api_key)
+# Determine AI provider
+AI_PROVIDER = os.getenv("AI_PROVIDER", "azure").lower()
 
 
 class IntentParser:
     """Parses natural language into structured modification intents."""
     
     def __init__(self):
-        if api_key:
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
-            self.enabled = True
+        self.enabled = False
+        self.provider = AI_PROVIDER
+        
+        if self.provider == "azure":
+            self._init_azure_openai()
+        elif self.provider == "gemini":
+            self._init_gemini()
         else:
-            self.enabled = False
-            logger.warning("AI disabled - no GEMINI_API_KEY")
+            logger.warning(f"Unknown AI provider: {self.provider}. Using fallback parsing.")
+    
+    def _init_azure_openai(self):
+        """Initialize Azure OpenAI client."""
+        try:
+            from openai import AzureOpenAI
+            
+            api_key = os.getenv("AZURE_OPENAI_API_KEY")
+            endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+            deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o")
+            api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+            
+            if api_key and endpoint:
+                self.client = AzureOpenAI(
+                    api_key=api_key,
+                    api_version=api_version,
+                    azure_endpoint=endpoint
+                )
+                self.deployment_name = deployment
+                self.enabled = True
+                logger.info(f"Azure OpenAI initialized with deployment: {deployment}")
+            else:
+                logger.warning("Azure OpenAI disabled - missing AZURE_OPENAI_API_KEY or AZURE_OPENAI_ENDPOINT")
+                
+        except ImportError:
+            logger.error("openai package not installed. Run: pip install openai")
+        except Exception as e:
+            logger.error(f"Failed to initialize Azure OpenAI: {e}")
+    
+    def _init_gemini(self):
+        """Initialize Google Gemini client."""
+        try:
+            import google.generativeai as genai
+            
+            api_key = os.getenv("GEMINI_API_KEY")
+            if api_key:
+                genai.configure(api_key=api_key)
+                self.model = genai.GenerativeModel('gemini-1.5-flash')
+                self.genai = genai
+                self.enabled = True
+                logger.info("Gemini AI initialized")
+            else:
+                logger.warning("Gemini disabled - no GEMINI_API_KEY")
+                
+        except ImportError:
+            logger.error("google-generativeai package not installed")
+        except Exception as e:
+            logger.error(f"Failed to initialize Gemini: {e}")
     
     def parse(self, request: str) -> Dict[str, Any]:
         """
@@ -44,22 +91,51 @@ class IntentParser:
         try:
             prompt = self._build_prompt(request)
             
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.1,
-                    max_output_tokens=1000,
-                )
-            )
-            
-            return self._parse_response(response.text)
+            if self.provider == "azure":
+                return self._parse_with_azure(prompt)
+            elif self.provider == "gemini":
+                return self._parse_with_gemini(prompt)
+            else:
+                return self._fallback_parse(request)
             
         except Exception as e:
             logger.error(f"AI parsing failed: {e}")
             return {"error": str(e)}
     
+    def _parse_with_azure(self, prompt: str) -> Dict[str, Any]:
+        """Parse using Azure OpenAI."""
+        response = self.client.chat.completions.create(
+            model=self.deployment_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a Kubernetes expert. Parse user requests into structured JSON for Kustomize patch generation. Return ONLY valid JSON, no markdown."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.1,
+            max_tokens=1000
+        )
+        
+        return self._parse_response(response.choices[0].message.content)
+    
+    def _parse_with_gemini(self, prompt: str) -> Dict[str, Any]:
+        """Parse using Google Gemini."""
+        response = self.model.generate_content(
+            prompt,
+            generation_config=self.genai.types.GenerationConfig(
+                temperature=0.1,
+                max_output_tokens=1000,
+            )
+        )
+        
+        return self._parse_response(response.text)
+    
     def _build_prompt(self, request: str) -> str:
-        return f"""You are a Kubernetes expert. Parse this natural language request into a structured modification intent.
+        return f"""Parse this natural language request into a structured modification intent.
 
 REQUEST: "{request}"
 

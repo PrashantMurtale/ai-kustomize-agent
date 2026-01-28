@@ -5,6 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)]()
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=flat-square&logo=kubernetes&logoColor=white)]()
 [![Kustomize](https://img.shields.io/badge/Kustomize-326CE5?style=flat-square&logo=kubernetes&logoColor=white)]()
+[![Azure OpenAI](https://img.shields.io/badge/Azure_OpenAI-0078D4?style=flat-square&logo=microsoft-azure&logoColor=white)]()
 [![Gemini](https://img.shields.io/badge/Gemini_AI-4285F4?style=flat-square&logo=google&logoColor=white)]()
 
 ---
@@ -83,7 +84,7 @@ ai-kustomize "Add readiness probe on port 8080 to all deployments without one"
 ### Prerequisites
 - Python 3.11+
 - kubectl configured (for cluster mode)
-- Gemini API key
+- **Azure OpenAI API key** (recommended) OR **Gemini API key**
 
 ### Installation
 
@@ -96,7 +97,8 @@ pip install -r requirements.txt
 
 # Configure
 cp .env.example .env
-# Edit .env with your GEMINI_API_KEY
+# Edit .env with your AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT
+# OR use GEMINI_API_KEY if using Google Gemini
 ```
 
 ### Usage

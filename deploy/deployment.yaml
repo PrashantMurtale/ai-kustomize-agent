@@ -1,0 +1,100 @@
+# =============================================================================
+# Kubernetes Deployment (Without Hardcoded Secrets)
+# =============================================================================
+# This deployment expects secrets to be created separately via:
+#   - GitHub Actions (recommended for CI/CD)
+#   - kubectl create secret
+#   - Azure Key Vault
+#   - Sealed Secrets
+#
+# DO NOT add secrets directly to this file!
+# =============================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devops-tools
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-kustomize-agent-config
+  namespace: devops-tools
+data:
+  AI_PROVIDER: "azure"
+  AZURE_OPENAI_DEPLOYMENT_NAME: "gpt-4o"
+  AZURE_OPENAI_API_VERSION: "2024-02-15-preview"
+  DRY_RUN: "true"
+  EXCLUDED_NAMESPACES: "kube-system,kube-public,kube-node-lease"
+  PROTECTED_NAMESPACES: "production,prod"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-kustomize-agent
+  namespace: devops-tools
+  labels:
+    app: ai-kustomize-agent
+    version: v1.0.0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-kustomize-agent
+  template:
+    metadata:
+      labels:
+        app: ai-kustomize-agent
+        version: v1.0.0
+    spec:
+      serviceAccountName: ai-kustomize-agent
+      containers:
+        - name: ai-kustomize-agent
+          image: YOUR_REGISTRY/ai-kustomize-agent:latest
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          envFrom:
+            - configMapRef:
+                name: ai-kustomize-agent-config
+            # Secret must be created separately (GitHub Actions, kubectl, or Key Vault)
+            - secretRef:
+                name: ai-kustomize-agent-secrets
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      securityContext:
+        fsGroup: 1000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-kustomize-agent
+  namespace: devops-tools
+  labels:
+    app: ai-kustomize-agent
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: ai-kustomize-agent
