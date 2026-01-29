@@ -28,20 +28,40 @@ class DeploymentTransformer(BaseTransformer):
         """Add memory or CPU limits to containers."""
         patch = self._build_patch_base()
         value = self.intent.get("value", {})
+        target_field = self.intent.get("target_field", "").lower()
+        
+        # Normalize value if it's a string
+        if isinstance(value, str):
+            if "memory" in target_field:
+                value = {"memory": value}
+            elif "cpu" in target_field:
+                value = {"cpu": value}
+            else:
+                # Default to memory if we can't tell
+                value = {"memory": value}
+        
         if not isinstance(value, dict):
-            value = {"memory": "512Mi", "cpu": "500m"} # Fallback
+            value = {"memory": "512Mi", "cpu": "500m"} # True fallback
 
         containers = self.resource.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+
+        # Create localized patch for containers
+        patched_containers = []
+        for c in containers:
+            container_patch = {"name": c["name"]}
+            
+            # If AI specified a specific container name
+            target_container = self.intent.get("conditions", {}).get("container_name")
+            if target_container and c["name"] != target_container:
+                continue
+                
+            container_patch["resources"] = { "limits": value }
+            patched_containers.append(container_patch)
 
         patch["spec"] = {
             "template": {
                 "spec": {
-                    "containers": [
-                        {
-                            "name": c["name"],
-                            "resources": { "limits": value }
-                        } for c in containers
-                    ]
+                    "containers": patched_containers
                 }
             }
         }
