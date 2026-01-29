@@ -37,6 +37,10 @@ class AIKustomizeAgent:
     
     def __init__(
         self,
+        mode: str = "cluster",
+        manifest_path: Optional[str] = None,
+        kubeconfig: Optional[str] = None,
+        context: Optional[str] = None,
         namespace: Optional[str] = None,
         dry_run: bool = True,
         yes: bool = False
