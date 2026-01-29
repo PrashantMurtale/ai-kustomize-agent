@@ -103,13 +103,15 @@ class AIKustomizeAgent:
             for p in intent_patches:
                 key = (p['kind'], p['name'], p['namespace'])
                 if key not in all_resource_patches:
+                    logger.debug(f"      Initial patch for {key}")
                     all_resource_patches[key] = p
                 else:
+                    logger.debug(f"      Merging patch for {key}")
                     # Deep merge patch data
                     self._deep_merge(all_resource_patches[key]['patch'], p['patch'])
-                    # Update diff and yaml
-                    # (Re-generating diff after merge might be better)
+                    # Update yaml
                     all_resource_patches[key]['yaml'] = yaml.dump(all_resource_patches[key]['patch'], default_flow_style=False)
+                    logger.debug(f"      Merged patch: {all_resource_patches[key]['yaml']}")
 
         if not all_resource_patches:
             return {"status": "warning", "message": "No patches generated"}
