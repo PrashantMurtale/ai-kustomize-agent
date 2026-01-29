@@ -19,6 +19,7 @@ from scanners.cluster_scanner import ClusterScanner
 from scanners.manifest_scanner import ManifestScanner
 from outputs.kustomize import KustomizeGenerator
 from outputs.diff import DiffPreview
+import yaml
 
 # Load environment variables
 load_dotenv()
