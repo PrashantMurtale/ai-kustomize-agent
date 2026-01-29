@@ -37,17 +37,15 @@ class AIKustomizeAgent:
     
     def __init__(
         self,
-        mode: str = "cluster",
-        manifest_path: Optional[str] = None,
-        kubeconfig: Optional[str] = None,
-        context: Optional[str] = None,
         namespace: Optional[str] = None,
-        dry_run: bool = True
+        dry_run: bool = True,
+        yes: bool = False
     ):
         self.mode = mode
         self.manifest_path = manifest_path
         self.namespace = namespace
         self.dry_run = dry_run
+        self.yes = yes
         
         # Initialize components
         self.intent_parser = IntentParser()
@@ -141,7 +139,7 @@ class AIKustomizeAgent:
         
         if not self.dry_run:
             # Confirm before applying
-            if not self._confirm_apply(len(final_patches)):
+            if not self.yes and not self._confirm_apply(len(final_patches)):
                 return {"status": "cancelled", "message": "User cancelled"}
             
             logger.info("🚀 Applying patches...")
@@ -280,6 +278,12 @@ Examples:
     
     # Other options
     parser.add_argument(
+        "--yes", "-y",
+        action="store_true",
+        help="Skip confirmation prompt when applying"
+    )
+    
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Verbose output"
@@ -307,7 +311,8 @@ Examples:
             kubeconfig=args.kubeconfig,
             context=args.context,
             namespace=args.namespace,
-            dry_run=not args.apply
+            dry_run=not args.apply,
+            yes=args.yes
         )
         
         result = agent.run(
