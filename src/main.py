@@ -64,71 +64,85 @@ class AIKustomizeAgent:
             self.scanner = ManifestScanner(path=manifest_path)
     
     def run(self, user_request: str, export_path: Optional[str] = None) -> dict:
-        """
-        Execute the full workflow.
-        
-        Args:
-            user_request: Natural language request
-            export_path: Optional path to export Kustomize files
-        
-        Returns:
-            Result dictionary with status and details
-        """
+        """Execute the full workflow."""
         logger.info(f"📝 Processing request: {user_request}")
         
         # Step 1: Parse intent
         logger.info("🤖 Parsing intent with AI...")
-        intent = self.intent_parser.parse(user_request)
+        intent_data = self.intent_parser.parse(user_request)
         
-        if intent.get("error"):
-            return {"status": "error", "message": f"Failed to parse intent: {intent['error']}"}
+        if intent_data.get("error"):
+            return {"status": "error", "message": f"Failed to parse intent: {intent_data['error']}"}
         
-        logger.info(f"   Action: {intent.get('action')}")
-        logger.info(f"   Target: {intent.get('resource_type')} in {intent.get('namespace', 'all namespaces')}")
+        intents = intent_data.get("intents", [])
+        if not intents:
+            return {"status": "warning", "message": "No intents found in request"}
+
+        # Collect all patches across all intents
+        all_resource_patches = {} # key: (kind, name, namespace), value: merged_patch_dict
+
+        for intent in intents:
+            logger.info(f"   Action: {intent.get('action')} on {intent.get('target_field')}")
+            
+            # Step 2: Scan resources for this intent
+            resources = self.scanner.scan(
+                resource_type=intent.get("resource_type", "deployments"),
+                namespace=self.namespace or intent.get("namespace"),
+                labels=intent.get("label_selector")
+            )
+            
+            if not resources:
+                logger.warning(f"      No matching resources found for {intent.get('target_field')}")
+                continue
+            
+            # Step 3: Generate patches for this intent
+            intent_patches = self.patch_generator.generate(intent, resources)
+            
+            # Step 4: Merge patches for the same resource
+            for p in intent_patches:
+                key = (p['kind'], p['name'], p['namespace'])
+                if key not in all_resource_patches:
+                    all_resource_patches[key] = p
+                else:
+                    # Deep merge patch data
+                    self._deep_merge(all_resource_patches[key]['patch'], p['patch'])
+                    # Update diff and yaml
+                    # (Re-generating diff after merge might be better)
+                    all_resource_patches[key]['yaml'] = yaml.dump(all_resource_patches[key]['patch'], default_flow_style=False)
+
+        if not all_resource_patches:
+            return {"status": "warning", "message": "No patches generated"}
+
+        final_patches = list(all_resource_patches.values())
+        logger.info(f"   Total unique resources to patch: {len(final_patches)}")
         
-        # Step 2: Scan resources
-        logger.info("🔍 Scanning resources...")
-        resources = self.scanner.scan(
-            resource_type=intent.get("resource_type", "deployments"),
-            namespace=self.namespace or intent.get("namespace"),
-            labels=intent.get("label_selector")
-        )
-        
-        if not resources:
-            return {"status": "warning", "message": "No matching resources found"}
-        
-        logger.info(f"   Found {len(resources)} matching resources")
-        
-        # Step 3: Generate patches
-        logger.info("🔧 Generating patches...")
-        patches = self.patch_generator.generate(intent, resources)
-        
-        logger.info(f"   Generated {len(patches)} patches")
-        
-        # Step 4: Preview changes
+        # Step 5: Preview changes
         if self.dry_run or export_path:
             logger.info("👀 Preview of changes:")
-            for patch in patches:
+            for patch in final_patches:
                 print(f"\n--- {patch['name']} ---")
-                print(patch['diff'])
+                print(f"Resource: {patch['kind']}/{patch['name']}")
+                print(f"Namespace: {patch['namespace']}")
+                print("Changes:")
+                print(patch['yaml'])
         
-        # Step 5: Export or Apply
+        # Step 6: Export or Apply
         if export_path:
             logger.info(f"📦 Exporting to {export_path}...")
-            self.kustomize_gen.export(patches, export_path)
+            self.kustomize_gen.export(final_patches, export_path)
             return {
                 "status": "exported",
                 "path": export_path,
-                "patches_count": len(patches)
+                "patches_count": len(final_patches)
             }
         
         if not self.dry_run:
             # Confirm before applying
-            if not self._confirm_apply(len(patches)):
+            if not self._confirm_apply(len(final_patches)):
                 return {"status": "cancelled", "message": "User cancelled"}
             
             logger.info("🚀 Applying patches...")
-            results = self._apply_patches(patches)
+            results = self._apply_patches(final_patches)
             return {
                 "status": "applied",
                 "applied": results["success"],
@@ -137,9 +151,38 @@ class AIKustomizeAgent:
         
         return {
             "status": "preview",
-            "patches_count": len(patches),
+            "patches_count": len(final_patches),
             "message": "Use --apply to apply changes or --export to save Kustomize files"
         }
+
+    def _deep_merge(self, base: dict, extra: dict):
+        """Deep merge two dictionaries."""
+        import collections.abc
+        for k, v in extra.items():
+            if isinstance(v, collections.abc.Mapping) and k in base and isinstance(base[k], dict):
+                self._deep_merge(base[k], v)
+            elif isinstance(v, list) and k in base and isinstance(base[k], list):
+                # For lists (like containers), merge by name if possible
+                if k == "containers" or k == "initContainers":
+                    self._merge_containers(base[k], v)
+                else:
+                    # Fallback: extend if not already present
+                    for item in v:
+                        if item not in base[k]:
+                            base[k].append(item)
+            else:
+                base[k] = v
+
+    def _merge_containers(self, base_list: list, extra_list: list):
+        """Merge container lists by name."""
+        base_map = {c["name"]: c for c in base_list}
+        for extra_c in extra_list:
+            name = extra_c.get("name")
+            if name in base_map:
+                self._deep_merge(base_map[name], extra_c)
+            else:
+                base_list.append(extra_c)
+
     
     def _confirm_apply(self, patch_count: int) -> bool:
         """Ask user to confirm before applying."""

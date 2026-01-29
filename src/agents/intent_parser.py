@@ -109,7 +109,7 @@ class IntentParser:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a Kubernetes expert. Your task is to parse user requests into a SPECIFIC structured JSON format for Kustomize patch generation. \nCRITICAL: DO NOT return a Kubernetes manifest. DO NOT return markdown. return ONLY the JSON intent object."
+                    "content": "You are a Kubernetes expert. Your task is to parse user requests into SPECIFIC structured JSON intents for Kustomize patch generation. \nCRITICAL: DO NOT return a Kubernetes manifest. DO NOT return markdown. Return a JSON object with a list of one or more intent objects."
                 },
                 {
                     "role": "user",
@@ -135,36 +135,47 @@ class IntentParser:
         return self._parse_response(response.text)
     
     def _build_prompt(self, request: str) -> str:
-        return f"""Parse this natural language request into a structured modification intent.
+        return f"""Parse this natural language request into one or more structured modification intent objects.
+If the request involves multiple changes (e.g. \"add label AND set memory\"), provide multiple intent objects.
 
 REQUEST: "{request}"
 
 Output JSON with this exact structure:
 {{
-    "action": "add|update|remove|set",
-    "resource_type": "deployments|pods|services|configmaps|all",
-    "target_field": "resources.limits.memory|resources.limits.cpu|image|labels|annotations|securityContext|...",
-    "value": "the value to set",
-    "namespace": "namespace name or null for all",
-    "label_selector": "app=web or null for all",
-    "conditions": {{
-        "only_if_missing": true/false,
-        "container_name": "specific container or null"
-    }},
-    "description": "Human readable description of what will be changed"
+    "intents": [
+        {{
+            "action": "add|update|remove|set",
+            "resource_type": "deployments|pods|services|configmaps|all",
+            "target_field": "resources.limits.memory|resources.limits.cpu|image|labels|annotations|securityContext|...",
+            "value": "the value to set (can be a string or a detailed object/dict)",
+            "namespace": "namespace name or null for all",
+            "label_selector": "app=web or null for all",
+            "conditions": {{
+                "only_if_missing": true/false,
+                "container_name": "specific container or null"
+            }},
+            "description": "Human readable description of what will be changed"
+        }}
+    ]
 }}
 
 Examples:
-- "Add memory limit 512Mi to all deployments" ->
-  {{"action": "add", "resource_type": "deployments", "target_field": "resources.limits.memory", "value": "512Mi"}}
+- \"Add memory limit 512Mi to all deployments\" ->
+  {{
+    \"intents\": [
+      {{\"action\": \"add\", \"resource_type\": \"deployments\", \"target_field\": \"resources.limits.memory\", \"value\": \"512Mi\"}}
+    ]
+  }}
 
-- "Update images from docker.io to ecr.aws" ->
-  {{"action": "update", "resource_type": "deployments", "target_field": "image", "value": {{"from": "docker.io", "to": "ecr.aws"}}}}
+- \"Scale deployments to 3 and update nginx image to v1.2\" ->
+  {{
+    \"intents\": [
+      {{\"action\": \"set\", \"resource_type\": \"deployments\", \"target_field\": \"replicas\", \"value\": 3}},
+      {{\"action\": \"update\", \"resource_type\": \"deployments\", \"target_field\": \"image\", \"value\": \"nginx:v1.2\"}}
+    ]
+  }}
 
-- "Add label team=platform to services" ->
-  {{"action": "add", "resource_type": "services", "target_field": "labels", "value": {{"team": "platform"}}}}
-
-Return ONLY valid JSON intent object.
+Return ONLY valid JSON intent object. 
 CRITICAL: DO NOT RETURN A KUBERNETES MANIFEST. RETURN ONLY THE STRUCTURED INTENT JSON ABOVE.
 """
 
@@ -187,55 +198,46 @@ CRITICAL: DO NOT RETURN A KUBERNETES MANIFEST. RETURN ONLY THE STRUCTURED INTENT
                 return {"error": "No JSON object found in response", "raw": text}
             
             # We'll try to find a valid JSON object starting from each '{'
-            # because sometimes the first '{' might be part of an invalid block
             decoder = json.JSONDecoder()
-            intent = None
+            data = None
             
             for i in range(len(text)):
                 if text[i] == '{':
                     try:
-                        # Clean the segment starting from here
                         segment = text[i:]
-                        # Basic trailing comma cleaning for the segment
                         segment = re.sub(r',\s*([\]\}])', r'\1', segment)
                         
                         obj, end_pos = decoder.raw_decode(segment)
-                        if isinstance(obj, dict) and "action" in obj:
-                            intent = obj
+                        if isinstance(obj, dict):
+                            data = obj
                             break
                     except (json.JSONDecodeError, ValueError):
                         continue
             
-            if not intent:
-                # If we couldn't find a dict with "action", just try the first dict we found
-                for i in range(len(text)):
-                    if text[i] == '{':
-                        try:
-                            segment = re.sub(r',\s*([\]\}])', r'\1', text[i:])
-                            obj, end_pos = decoder.raw_decode(segment)
-                            if isinstance(obj, dict):
-                                intent = obj
-                                break
-                        except (json.JSONDecodeError, ValueError):
-                            continue
+            if not data:
+                return {"error": "Could not extract valid JSON from AI response", "raw": text}
+            
+            # Normalize to include "intents" list
+            intents = []
+            if "intents" in data and isinstance(data["intents"], list):
+                intents = data["intents"]
+            elif "action" in data:
+                # Single intent returned at top level
+                intents = [data]
+            elif isinstance(data, list):
+                # List of intents returned at top level
+                intents = data
+            else:
+                return {"error": "Invalid JSON structure: missing 'intents' or intent fields", "raw": text}
 
-            if not intent:
-                return {"error": "Could not extract valid JSON intent from AI response", "raw": text}
-            
-            # If AI returned a list (should be handled by dict check above but being safe)
-            if isinstance(intent, list) and len(intent) > 0:
-                intent = intent[0]
-            
-            if not isinstance(intent, dict):
-                return {"error": f"AI did not return a dictionary object: {type(intent)}", "raw": text}
-            
-            # Validate required fields
+            # Validate each intent
             required = ["action", "resource_type", "target_field"]
-            for field in required:
-                if field not in intent:
-                    intent[field] = "unknown"
+            for intent in intents:
+                for field in required:
+                    if field not in intent:
+                        intent[field] = "unknown"
             
-            return intent
+            return {"intents": intents}
             
         except (json.JSONDecodeError, Exception) as e:
             logger.error(f"Failed to parse AI response: {e} - Raw text: {text[:200]}")
