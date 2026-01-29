@@ -26,40 +26,59 @@ DevOps engineers frequently need to make bulk changes to Kubernetes resources:
 ## ✨ How It Works
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│              "Add memory limit 512Mi to all deployments"    │
-│                              ↓                              │
-│                    [AI Intent Parser]                       │
-│                              ↓                              │
-│              [Cluster/File Scanner] - Find targets          │
-│                              ↓                              │
-│              [Patch Generator] - Create Kustomize patches   │
-│                              ↓                              │
-│              [Preview] - Show diff before applying          │
-│                              ↓                              │
-│              [Apply/Export] - Apply or save to files        │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ "Update image to v2, add label env=prod & set memory to 1Gi"   │
+│                                ↓                                │
+│           [AI Intent Parser] - Splits into 3 intents            │
+│                                ↓                                │
+│           [Cluster/File Scanner] - Find target resources        │
+│                                ↓                                │
+│           [Patch Generator] - Create & Merge patches            │
+│                                ↓                                │
+│           [Preview] - Show consolidated diff per resource      │
+│                                ↓                                │
+│           [Apply/Export] - Execute or generate overlay          │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 💬 Example Commands
 
+### 📦 Deployment Level (Controlled via Spec Template)
 ```bash
-# Add resource limits to all deployments
-ai-kustomize "Add memory limit 512Mi and CPU limit 500m to all deployments in staging"
+# Update container image
+python -m main --apply --yes "Update image of test-deploy to nginx:1.16.0"
 
-# Update images to private registry
-ai-kustomize "Update all images from docker.io to ecr.aws/mycompany"
+# Set resource limits
+python -m main --apply --yes "Set memory limit to 512Mi for test-deploy"
 
-# Add security context
-ai-kustomize "Add runAsNonRoot: true to all pods"
+# Scale replicas
+python -m main --apply --yes "Scale test-deploy to 3 replicas"
 
-# Add labels to all services
-ai-kustomize "Add label 'team=platform' to all services in namespace api"
+# Add labels to the template (for pod selection)
+python -m main --apply --yes "Add label tier=frontend to test-deploy"
+```
 
-# Add probes
-ai-kustomize "Add readiness probe on port 8080 to all deployments without one"
+### 📍 Pod Level (Direct Resource Modification)
+```bash
+# Add label directly to a pod
+python -m main --apply --yes "Add label role=debugging to test-pod"
+
+# Add annotation to a pod
+python -m main --apply --yes "Add annotation debug-level=high to test-pod"
+```
+
+### 🚀 Complex Multi-Action Commands (The Agent's Power)
+The agent automatically splits these into multiple intents and generates a single clean patch.
+```bash
+# Multiple modifications to a single deployment
+python -m main --apply --yes \
+  "Update nginx to v1.16, add label env=prod, and set CPU limit to 500m for my-nginx"
+
+# Bulk changes across multiple resources
+python -m main --apply --yes \
+  "Add label team=devops and set memory limit 128Mi to all deployments in staging"
 ```
 
 ---
@@ -69,52 +88,46 @@ ai-kustomize "Add readiness probe on port 8080 to all deployments without one"
 | Feature | Description |
 |---------|-------------|
 | **Natural Language** | Describe changes in plain English |
-| **Multi-Resource** | Deployments, Pods, Services, ConfigMaps, etc. |
-| **Cluster Mode** | Scan live Kubernetes cluster |
+| **Multi-Intent** | Support for multiple actions in one request (e.g., "Add label AND set memory") |
+| **Deep Patch Merging**| Consolidates multiple modifications into a single strategic merge patch |
+| **Multi-Resource** | Deployments, Standalone Pods, Services, ConfigMaps, etc. |
+| **Cluster Mode** | Scan and modify live Kubernetes resources |
 | **File Mode** | Work with local YAML manifests |
-| **Preview Mode** | See diff before applying |
-| **Export Mode** | Generate Kustomize overlays for GitOps |
-| **Dry Run** | Validate without changes |
-| **Rollback** | Undo last batch of changes |
+| **Export Mode** | Generate Kustomize overlays (GitOps ready) |
+| **Auto-Approval** | Use `--yes` flag to skip interactive prompts in scripts |
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Usage Guide
 
-### Prerequisites
-- Python 3.11+
-- kubectl configured (for cluster mode)
-- **Azure OpenAI API key** (recommended) OR **Gemini API key**
-
-### Installation
-
+### Install Dependencies
 ```bash
-git clone https://github.com/PrashantMurtale/ai-kustomize-agent.git
-cd ai-kustomize-agent
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Configure
-cp .env.example .env
-# Edit .env with your AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT
-# OR use GEMINI_API_KEY if using Google Gemini
 ```
 
-### Usage
-
+### Configure
+Edit `.env` or set environment variables:
 ```bash
-# File Mode (no cluster access needed)
-ai-kustomize --mode file --path ./manifests "Add resource limits to deployments"
+AZURE_OPENAI_API_KEY=your_key
+AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com/
+AI_PROVIDER=azure  # or 'gemini'
+```
 
-# Cluster Mode (uses kubeconfig)
-ai-kustomize --mode cluster "Add memory limit 512Mi to all deployments in staging"
+### Command Flags
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--apply` | | Actually execute the changes on the cluster |
+| `--yes` | `-y` | Skip confirmation prompt (required for non-interactive use) |
+| `--export` | | Path to export Kustomize overlay files |
+| `--verbose`| `-v` | Show detailed logs and patch merging steps |
+| `--mode` | | `cluster` (live) or `file` (local) |
+| `--namespace`| `-n` | Restrict search to a specific namespace |
 
-# Preview only (no changes)
-ai-kustomize --preview "Update all images to use ecr.aws/company"
-
-# Export Kustomize files
-ai-kustomize --export ./output "Add security context to all pods"
+### In-Cluster Execution (via POD)
+If the agent is running in your cluster, you can trigger it from your terminal:
+```bash
+kubectl exec deployment/ai-kustomize-agent -n devops-tools -- \
+  bash -c "cd /app && PYTHONPATH=/app/src python -m main --mode cluster --namespace agent-test --apply --yes 'Add label test=true to test-deploy'"
 ```
 
 ---
