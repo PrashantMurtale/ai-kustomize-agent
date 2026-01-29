@@ -117,12 +117,12 @@ class DeploymentTransformer(BaseTransformer):
         }
         return patch
 
-    def _add_labels(self) -> Dict[str, Any]:
+    def _add_labels(self, target_path: str = None) -> Dict[str, Any]:
         patch = self._build_patch_base()
         patch["spec"] = {"template": {"metadata": {"labels": self.intent.get("value")}}}
         return patch
 
-    def _add_annotations(self) -> Dict[str, Any]:
+    def _add_annotations(self, target_path: str = None) -> Dict[str, Any]:
         patch = self._build_patch_base()
         patch["spec"] = {"template": {"metadata": {"annotations": self.intent.get("value")}}}
         return patch
