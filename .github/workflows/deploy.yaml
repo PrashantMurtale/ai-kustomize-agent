@@ -21,11 +21,16 @@
 
 name: Build and Deploy (Docker Hub)
 
+# DISABLING AUTOMATIC WORKFLOW (Comment out 'on' to stop auto-runs)
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
+#     branches: [main]
+
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch: # Enable manual trigger instead
+
 
 env:
   IMAGE_NAME: ai-kustomize-agent
