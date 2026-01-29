@@ -170,66 +170,59 @@ CRITICAL: DO NOT RETURN A KUBERNETES MANIFEST. RETURN ONLY THE STRUCTURED INTENT
 
     def _parse_response(self, text: str) -> Dict[str, Any]:
         """Parse AI response into structured intent."""
+        import re
+        import json
+        
         try:
             # Clean up response
             text = text.strip()
             
-            # Remove any markdown code blocks
-            if "```" in text:
-                import re
-                json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-                if json_match:
-                    text = json_match.group(1)
-                else:
-                    # Fallback if regex fails, just strip markers
-                    text = text.replace("```json", "").replace("```", "").strip()
+            # Remove markdown markers if present
+            text = re.sub(r"```(?:json)?", "", text)
+            text = text.replace("```", "").strip()
             
-            # Find the first { and last }
-            # If there are multiple JSON blocks, we want the first valid one
-            all_objects = []
+            # Find the first '{' to start decoding
+            start_idx = text.find('{')
+            if start_idx == -1:
+                return {"error": "No JSON object found in response", "raw": text}
             
-            # Simple balancing to find JSON objects
-            brace_count = 0
-            start_index = -1
+            # We'll try to find a valid JSON object starting from each '{'
+            # because sometimes the first '{' might be part of an invalid block
+            decoder = json.JSONDecoder()
+            intent = None
             
-            for i, char in enumerate(text):
-                if char == '{':
-                    if brace_count == 0:
-                        start_index = i
-                    brace_count += 1
-                elif char == '}':
-                    brace_count -= 1
-                    if brace_count == 0 and start_index != -1:
-                        # Found a full object
-                        potential_json = text[start_index:i+1]
+            for i in range(len(text)):
+                if text[i] == '{':
+                    try:
+                        # Clean the segment starting from here
+                        segment = text[i:]
+                        # Basic trailing comma cleaning for the segment
+                        segment = re.sub(r',\s*([\]\}])', r'\1', segment)
                         
-                        # Clean trailing commas
-                        import re
-                        potential_json = re.sub(r',\s*([\]\}])', r'\1', potential_json)
-                        
+                        obj, end_pos = decoder.raw_decode(segment)
+                        if isinstance(obj, dict) and "action" in obj:
+                            intent = obj
+                            break
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+            
+            if not intent:
+                # If we couldn't find a dict with "action", just try the first dict we found
+                for i in range(len(text)):
+                    if text[i] == '{':
                         try:
-                            obj = json.loads(potential_json.strip())
+                            segment = re.sub(r',\s*([\]\}])', r'\1', text[i:])
+                            obj, end_pos = decoder.raw_decode(segment)
                             if isinstance(obj, dict):
-                                all_objects.append(obj)
-                                # Break after first valid intent object
+                                intent = obj
                                 break
-                        except json.JSONDecodeError:
+                        except (json.JSONDecodeError, ValueError):
                             continue
+
+            if not intent:
+                return {"error": "Could not extract valid JSON intent from AI response", "raw": text}
             
-            if not all_objects:
-                # Last ditch effort with the old method
-                start = text.find('{')
-                end = text.rfind('}')
-                if start != -1 and end != -1:
-                    text = text[start:end+1]
-                    text = re.sub(r',\s*([\]\}])', r'\1', text)
-                    intent = json.loads(text.strip())
-                else:
-                    return {"error": "No JSON object found in response", "raw": text}
-            else:
-                intent = all_objects[0]
-            
-            # If AI returned a list (rare with the brace counting but safe to keep)
+            # If AI returned a list (should be handled by dict check above but being safe)
             if isinstance(intent, list) and len(intent) > 0:
                 intent = intent[0]
             
