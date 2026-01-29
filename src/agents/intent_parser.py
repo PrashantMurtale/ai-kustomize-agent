@@ -135,48 +135,62 @@ class IntentParser:
         return self._parse_response(response.text)
     
     def _build_prompt(self, request: str) -> str:
-        return f"""Parse this natural language request into one or more structured modification intent objects.
-If the request involves multiple changes (e.g. \"add label AND set memory\"), provide multiple intent objects.
+        return f"""You are a specialized Kubernetes Intent Parser. Your job is to convert natural language requests into a list of structured intent objects for a patch generator.
 
-REQUEST: "{request}"
+CRITICAL RULES:
+1. NEVER return a Kubernetes Manifest (like apiVersion: v1, Kind: Pod, etc.).
+2. NEVER return Markdown.
+3. Return ONLY a JSON object.
+4. If a request has multiple parts, split them into multiple intent objects.
 
-Output JSON with this exact structure:
+USER REQUEST: "{request}"
+
+EXPECTED FORMAT:
 {{
     "intents": [
         {{
             "action": "add|update|remove|set",
             "resource_type": "deployments|pods|services|configmaps|all",
-            "target_field": "resources.limits.memory|resources.limits.cpu|image|labels|annotations|securityContext|...",
-            "value": "the value to set (can be a string or a detailed object/dict)",
-            "namespace": "namespace name or null for all",
-            "label_selector": "app=web or null for all",
-            "conditions": {{
-                "only_if_missing": true/false,
-                "container_name": "specific container or null"
-            }},
-            "description": "Human readable description of what will be changed"
+            "target_field": "resources.limits.memory|resources.limits.cpu|image|labels|annotations|securityContext|replicas",
+            "value": "the value (string or object)",
+            "namespace": "namespace name or null",
+            "description": "Reasoning for this change"
         }}
     ]
 }}
 
-Examples:
-- \"Add memory limit 512Mi to all deployments\" ->
-  {{
-    \"intents\": [
-      {{\"action\": \"add\", \"resource_type\": \"deployments\", \"target_field\": \"resources.limits.memory\", \"value\": \"512Mi\"}}
-    ]
-  }}
+### EXAMPLES OF CORRECT BEHAVIOR ###
 
-- \"Scale deployments to 3 and update nginx image to v1.2\" ->
-  {{
-    \"intents\": [
-      {{\"action\": \"set\", \"resource_type\": \"deployments\", \"target_field\": \"replicas\", \"value\": 3}},
-      {{\"action\": \"update\", \"resource_type\": \"deployments\", \"target_field\": \"image\", \"value\": \"nginx:v1.2\"}}
+Request: "Update nginx to v1.16 and add label env=prod"
+Response: {{
+    "intents": [
+        {{
+            "action": "update",
+            "resource_type": "deployments",
+            "target_field": "image",
+            "value": "nginx:v1.16",
+            "description": "Update nginx container image to v1.16"
+        }},
+        {{
+            "action": "add",
+            "resource_type": "deployments",
+            "target_field": "labels",
+            "value": {{"env": "prod"}},
+            "description": "Adding production environment label"
+        }}
     ]
-  }}
+}}
 
-Return ONLY valid JSON intent object. 
-CRITICAL: DO NOT RETURN A KUBERNETES MANIFEST. RETURN ONLY THE STRUCTURED INTENT JSON ABOVE.
+### EXAMPLE OF INCORRECT BEHAVIOR (DO NOT DO THIS) ###
+Incorrect Response: {{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {{ "name": "nginx" }},
+  ...
+}}
+
+### NOW PARSE THE USER REQUEST ###
+Return ONLY the JSON object.
 """
 
     def _parse_response(self, text: str) -> Dict[str, Any]:
