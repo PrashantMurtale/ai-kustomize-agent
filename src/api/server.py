@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 # Add src to path
@@ -97,6 +98,12 @@ class ResourceResponse(BaseModel):
 
 
 # === API Endpoints ===
+
+@app.get("/", include_in_schema=False)
+async def root():
+    """Redirect root to API docs."""
+    return RedirectResponse(url="/docs")
+
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
