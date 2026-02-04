@@ -108,6 +108,15 @@ class ClusterScanner:
         
         return resources
     
+    def list_namespaces(self) -> List[str]:
+        """List all namespaces in the cluster."""
+        try:
+            result = self.core_v1.list_namespace()
+            return [ns.metadata.name for ns in result.items]
+        except ApiException as e:
+            logger.error(f"Failed to list namespaces: {e}")
+            return []
+    
     def _get_deployments(self, namespace: Optional[str], labels: Optional[str]) -> List[Dict]:
         """Get deployments."""
         if namespace:

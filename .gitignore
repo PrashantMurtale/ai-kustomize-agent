@@ -15,6 +15,11 @@ venv/
 output/
 *.log
 
+# Node.js (Web Frontend)
+node_modules/
+web/dist/
+web/.env.local
+
 # Kubernetes
 kubeconfig
 *.kubeconfig

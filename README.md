@@ -5,10 +5,34 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)]()
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=flat-square&logo=kubernetes&logoColor=white)]()
 [![Kustomize](https://img.shields.io/badge/Kustomize-326CE5?style=flat-square&logo=kubernetes&logoColor=white)]()
+[![React](https://img.shields.io/badge/React-18+-61DAFB?style=flat-square&logo=react&logoColor=black)]()
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)]()
 [![Azure OpenAI](https://img.shields.io/badge/Azure_OpenAI-0078D4?style=flat-square&logo=microsoft-azure&logoColor=white)]()
-[![Gemini](https://img.shields.io/badge/Gemini_AI-4285F4?style=flat-square&logo=google&logoColor=white)]()
 
 ---
+
+## 🖥️ Web UI Dashboard
+
+The agent now includes a **premium web dashboard** for managing Kubernetes resources visually!
+
+### Features:
+- 💬 **Chat Interface** - Type natural language commands
+- 📋 **Live Patch Preview** - See YAML diffs before applying
+- 🎯 **Namespace Selector** - Target specific namespaces
+- 🚀 **One-Click Apply** - Execute changes instantly
+- 🌙 **Dark Mode** - Premium glassmorphism design
+
+### Run the Web UI:
+```bash
+# Start API server
+cd src && python -m api.server
+
+# Start frontend (in another terminal)
+cd web && npm run dev
+```
+
+Open `http://localhost:5173` in your browser.
+
 
 ## 🎯 The Problem
 
