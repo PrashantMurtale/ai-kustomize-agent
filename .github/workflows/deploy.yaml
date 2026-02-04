@@ -21,15 +21,11 @@
 
 name: Build and Deploy (Docker Hub)
 
-# DISABLING AUTOMATIC WORKFLOW (Comment out 'on' to stop auto-runs)
-# on:
-#   push:
-#     branches: [main]
-#   pull_request:
-#     branches: [main]
-
+# ENABLING AUTOMATIC WORKFLOW
 on:
-  workflow_dispatch: # Enable manual trigger instead
+  push:
+    branches: [main]
+  workflow_dispatch: # Also allow manual trigger
 
 
 env:
