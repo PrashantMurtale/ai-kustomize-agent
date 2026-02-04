@@ -15,6 +15,12 @@
 
 The agent now includes a **premium web dashboard** for managing Kubernetes resources visually!
 
+### 📸 Screenshots
+
+| Preview Patches | Apply Changes |
+|-----------------|---------------|
+| ![Preview](docs/images/ui-preview.png) | ![Apply](docs/images/ui-apply.png) |
+
 ### Features:
 - 💬 **Chat Interface** - Type natural language commands
 - 📋 **Live Patch Preview** - See YAML diffs before applying
@@ -32,6 +38,7 @@ cd web && npm run dev
 ```
 
 Open `http://localhost:5173` in your browser.
+
 
 
 ## 🎯 The Problem
